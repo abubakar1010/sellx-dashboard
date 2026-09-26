@@ -7,5 +7,9 @@ export default defineConfig({
   server:{
     host:"0.0.0.0",
     port: 8080,
-  }
+  },
+  // nginx proxies sellx.no to `vite preview`; Vite 6+ rejects unlisted hosts.
+  preview: {
+    allowedHosts: ["sellx.no", "www.sellx.no"],
+  },
 })

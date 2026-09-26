@@ -2,7 +2,9 @@ import { configureStore } from "@reduxjs/toolkit";
 import { setupListeners } from "@reduxjs/toolkit/query";
 import authReducer from "./features/auth/authSlice";
 import { baseApi } from "./baseApi/baseApi";
-import storage from "redux-persist/lib/storage"; // Use localStorage for web
+// The ES build: Vite 8 hands the CommonJS `lib/storage` over as its module
+// wrapper rather than the storage object, so `getItem` is undefined at startup.
+import storage from "redux-persist/es/storage"; // Use localStorage for web
 import { persistStore, persistReducer } from "redux-persist";
 import { combineReducers } from "redux";
 
