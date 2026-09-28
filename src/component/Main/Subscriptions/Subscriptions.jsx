@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { toast } from "sonner";
 import { FiEdit2, FiTrash2, FiCheckCircle } from "react-icons/fi";
@@ -9,15 +9,21 @@ import {
 } from "../../../redux/features/subscriptions/subscriptions";
 import { Link } from "react-router-dom";
 import { formatPrice } from "../../../utils/currency";
+import { apiErrorMessage } from "./planForm";
 
 /* ---------------- Toggle ---------------- */
-const Toggle = ({ checked, onChange }) => (
-  <label className="relative inline-block w-11 h-6 cursor-pointer flex-shrink-0 z-10">
+const Toggle = ({ checked, onChange, disabled = false }) => (
+  <label
+    className={`relative inline-block w-11 h-6 flex-shrink-0 z-10 ${
+      disabled ? "cursor-wait opacity-60" : "cursor-pointer"
+    }`}
+  >
     <input
       type="checkbox"
       className="opacity-0 w-0 h-0"
       checked={checked}
       onChange={onChange}
+      disabled={disabled}
     />
     <span
       className={`absolute inset-0 rounded-full transition-colors duration-200 ${
@@ -36,20 +42,32 @@ const Toggle = ({ checked, onChange }) => (
 Toggle.propTypes = {
   checked: PropTypes.bool.isRequired,
   onChange: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
 };
 
 /* ---------------- Plan Card ---------------- */
 const PlanCard = ({ plan, onDelete, onStatusUpdate }) => {
-  const [active, setActive] = useState(plan?.isActive);
+  // The API serialises Mongo's `_id` as `id`.
+  const planId = plan?.id ?? plan?._id;
+  const [active, setActive] = useState(Boolean(plan?.isActive));
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Follow the server's value once the list refetches.
+  useEffect(() => {
+    setActive(Boolean(plan?.isActive));
+  }, [plan?.isActive]);
 
   const handleToggle = async () => {
     const prev = active;
     setActive(!prev); // optimistic UI
+    setIsUpdating(true);
     try {
-      await onStatusUpdate(plan?._id);
+      await onStatusUpdate(planId);
     } catch (error) {
       setActive(prev); // rollback
-      toast.error(error?.data?.message || "Failed to update status");
+      toast.error(apiErrorMessage(error, "Could not update the plan status. Please try again."));
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -73,14 +91,14 @@ const PlanCard = ({ plan, onDelete, onStatusUpdate }) => {
 
         <div className="flex gap-4">
           <Link
-            to={`/subscriptions/${plan?._id}`}
+            to={`/subscriptions/${planId}`}
             className="text-gray-400 hover:text-gray-600"
           >
             <FiEdit2 size={15} />
           </Link>
 
           <button
-            onClick={() => onDelete(plan?._id)}
+            onClick={() => onDelete(planId)}
             className="text-red-400 hover:text-red-600"
           >
             <FiTrash2 size={15} />
@@ -115,7 +133,7 @@ const PlanCard = ({ plan, onDelete, onStatusUpdate }) => {
       <div className="flex justify-between items-center border-t pt-3 mt-4">
         <span className="text-sm text-gray-500">Active</span>
 
-        <Toggle checked={active} onChange={handleToggle} />
+        <Toggle checked={active} onChange={handleToggle} disabled={isUpdating} />
       </div>
     </div>
   );
@@ -129,33 +147,25 @@ PlanCard.propTypes = {
 
 /* ---------------- Main ---------------- */
 const Subscriptions = () => {
-  const { data: subscriptions, isLoading, isError, refetch } = useGetSubscriptionsQuery();
+  const { data: subscriptions, isLoading, isError } = useGetSubscriptionsQuery();
 
   const [deleteSubscription] = useDeleteSubscriptionMutation();
   const [updateStatus] = useUpdateStatusMutation();
 
   const handleDelete = async (id) => {
     try {
-     const res = await deleteSubscription(id).unwrap();
-      if(res?.success === true){
-        toast.success("Deleted successfully");
-        refetch();
-      }
+      const res = await deleteSubscription(id).unwrap();
+      toast.success(res?.message || "Plan deleted successfully.");
     } catch (error) {
-      toast.error("Delete failed");
+      toast.error(apiErrorMessage(error, "Could not delete the plan. Please try again."));
     }
   };
 
+  // Errors propagate so the card can roll back its optimistic toggle.
+  // The mutation invalidates the "subscriptions" tag, which refetches the list.
   const handleStatusUpdate = async (id) => {
-    try {
-      const res =  await updateStatus(id).unwrap();
-      if(res?.success === true){
-        toast.success("Update Status successfully");
-        refetch();
-      }
-    } catch (error) {
-      toast.error("Update failed");
-    }
+    const res = await updateStatus(id).unwrap();
+    toast.success(res?.message || "Plan status updated.");
   };
 
   if (isLoading) return <p className="text-center py-10">Loading...</p>;
@@ -186,7 +196,7 @@ const Subscriptions = () => {
       
       {subscriptions?.map((plan) => (
         <PlanCard
-          key={plan?._id}
+          key={plan?.id ?? plan?._id}
           plan={plan}
           onDelete={handleDelete}
           onStatusUpdate={handleStatusUpdate}
