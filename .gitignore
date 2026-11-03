@@ -24,3 +24,14 @@ dist-ssr
 *.sw?
 *.env
 
+.env
+.env.*
+!.env.example
+node_modules/
+build/
+.dart_tool/
+.next/
+*.apk
+*.aab
+*.zip
+.DS_Store
